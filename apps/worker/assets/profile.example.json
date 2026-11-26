@@ -1,0 +1,14 @@
+{
+  "full_name": "Your Full Name",
+  "email_for_applications": "you@example.com",
+  "phone": "+00 00 00000-0000",
+  "address": "Street and number, City, State, Postcode, Country",
+  "linkedin": "https://www.linkedin.com/in/your-handle",
+  "current_role": "Your current role and company (year-present)",
+  "experience_summary": "A sentence or two about your experience",
+  "languages": ["English (fluent)"],
+  "citizenship": ["Country"],
+  "work_model": "How you work, for example: Contractor through own company; available immediately",
+  "cv_path": "./assets/Your_CV.pdf",
+  "photo_path": "./assets/your-photo.jpg"
+}
