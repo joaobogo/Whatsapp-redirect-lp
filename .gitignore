@@ -1,0 +1,31 @@
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+coverage/
+out/
+
+# secrets - never commit
+.env
+.env.*
+!.env.example
+
+# browser profiles (logged-in sessions) and worker run scratch
+profiles/
+.runs/
+*.log
+
+# applicant files live only on the worker machines
+apps/worker/assets/*
+!apps/worker/assets/.gitkeep
+!apps/worker/assets/profile.example.json
+
+# test output
+test-results/
+playwright-report/
+.vercel/
+supabase/.temp/
+supabase/.branches/
+*.tsbuildinfo
+next-env.d.ts

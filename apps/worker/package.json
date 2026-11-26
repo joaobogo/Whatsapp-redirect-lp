@@ -1,0 +1,31 @@
+{
+  "name": "@fgv/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "login": "tsx src/login.ts",
+    "check": "tsx src/check.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.332",
+    "@anthropic-ai/sdk": "^1.14.0",
+    "@fgv/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@playwright/mcp": "^0.0.86",
+    "@supabase/supabase-js": "^2.119.2",
+    "cron-parser": "^5.10.7",
+    "dotenv": "^18.0.10",
+    "googleapis": "^190.0.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
