@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ItemRow } from '@fgv/shared';
+import { claudeAccessHint } from './chat';
 import { loadConfig } from './config';
 import { clip, redact, summarizeToolInput, toolLabel } from './log';
 import { UsageMeter, allowedToolsFor, handleMessage } from './runner';
@@ -217,7 +218,6 @@ describe('worker settings', () => {
   const base = {
     SUPABASE_URL: 'https://abc.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'x'.repeat(40),
-    ANTHROPIC_API_KEY: 'test-key-000000',
     WORKER_NAME: 'pichau-desktop',
   };
 
@@ -232,6 +232,7 @@ describe('worker settings', () => {
       isScheduler: true,
       claudeModel: 'claude-opus-5-5',
       claudeModelFast: 'claude-sonnet-5-5',
+      claudeAccess: 'login',
       sheets: null,
     });
     expect(config.browserProfileDir.endsWith('main')).toBe(true);
@@ -248,6 +249,21 @@ describe('worker settings', () => {
     expect(() => loadConfig({ ...base, WORKER_OWNER_EMAIL: 'not an email' })).toThrow();
   });
 
+  it('uses the Claude login unless a token or an API key is given', () => {
+    expect(loadConfig({ ...base }).claudeAccess).toBe('login');
+    // an empty line in .env must not count as a key
+    const empty = { ...base, ANTHROPIC_API_KEY: '', CLAUDE_CODE_OAUTH_TOKEN: '  ' };
+    expect(loadConfig(empty).claudeAccess).toBe('login');
+    expect('ANTHROPIC_API_KEY' in empty).toBe(false);
+    expect(loadConfig({ ...base, CLAUDE_CODE_OAUTH_TOKEN: 'token-123' }).claudeAccess).toBe(
+      'token',
+    );
+    expect(
+      loadConfig({ ...base, CLAUDE_CODE_OAUTH_TOKEN: 'token-123', ANTHROPIC_API_KEY: 'key-123' })
+        .claudeAccess,
+    ).toBe('api-key');
+  });
+
   it('treats a missing flag as false', () => {
     const config = loadConfig(base);
     expect(config.hasBrowser).toBe(false);
@@ -257,6 +273,14 @@ describe('worker settings', () => {
   it('says in plain words what is missing', () => {
     expect(() => loadConfig({})).toThrow(/WORKER_NAME|SUPABASE_URL/);
     expect(() => loadConfig({ ...base, WORKER_NAME: 'My Desktop!' })).toThrow(/lower-case/);
+  });
+});
+
+describe('claude access problems', () => {
+  it('explains a usage limit and a missing login in plain words', () => {
+    expect(claudeAccessHint("You've hit your usage limit")).toMatch(/usage limit/);
+    expect(claudeAccessHint('Invalid API key - please run /login')).toMatch(/not signed in/);
+    expect(claudeAccessHint('something else')).toBe('something else.');
   });
 });
 

@@ -6,6 +6,7 @@ export * from './schedule';
 export * from './pricing';
 export * from './profile';
 export * from './time';
+export * from './chat';
 export * from './bots/settings';
 export * from './bots/catalog';
 export * from './seed';

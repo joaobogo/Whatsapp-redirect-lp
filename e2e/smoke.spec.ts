@@ -233,6 +233,26 @@ test.describe('Phase 3 acceptance (local test database only)', () => {
     await expect(other.getByLabel('Who e2e-desktop belongs to')).toHaveCount(0);
   });
 
+  test('the chat says so when no computer is online to answer', async ({ page }) => {
+    // every computer went quiet
+    await fetch(`${supabaseUrl}/rest/v1/workers?name=like.e2e-*`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        apikey: serviceKey,
+        authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ last_heartbeat: '2020-01-01T00:00:00Z' }),
+    });
+    await logIn(page, OWNER);
+    await page.getByTestId('open-chat').click();
+    await page.getByTestId('chat-input').fill('What is running right now?');
+    await page.getByTestId('chat-send').click();
+    await expect(page.getByTestId('chat-error')).toContainText('No worker computer is online');
+    // the message is handed back so nothing typed is lost
+    await expect(page.getByTestId('chat-input')).toHaveValue('What is running right now?');
+  });
+
   test('a viewer cannot change anything', async ({ page }) => {
     await logIn(page, VIEWER);
     // no Stop all, Run now is disabled, schedule switches are disabled

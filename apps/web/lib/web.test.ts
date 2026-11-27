@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatMessageRow, ItemRow } from '@fgv/shared';
+import {
+  MUTATING_CHAT_TOOLS,
+  chatEntryFromRow,
+  chatPrompt,
+  chatSystemPrompt,
+  isMutatingChatTool,
+  type ChatEntry,
+  type ItemRow,
+  type PendingAction,
+} from '@fgv/shared';
 import type { Viewer } from '@/lib/auth';
-import { chatSystemPrompt, entryFromRow, historyForModel, type ChatEntry } from '@/lib/chat';
-import { isMutatingTool, runChatTool, toolsFor } from '@/lib/chat-tools';
+import { confirmAction } from '@/lib/chat-tools';
 import { csvCell, itemsToCsv } from '@/lib/csv';
 import { parseItemFilters, readGlobalSettings, type Db } from '@/lib/data';
 import { friendlyError } from '@/lib/errors';
@@ -10,84 +18,77 @@ import { friendlyError } from '@/lib/errors';
 const owner: Viewer = { id: 'u1', email: 'o@example.com', name: 'Owner', role: 'owner' };
 const viewer: Viewer = { id: 'u2', email: 'v@example.com', name: 'Viewer', role: 'viewer' };
 
-/** A database stand-in that fails the test if anything tries to write through it. */
-const noWrites = new Proxy(
+/** A database stand-in that fails the test if anything touches it. */
+const untouchable = new Proxy(
   {},
   {
     get(_target, property) {
-      throw new Error(`The chat tool touched the database (${String(property)}) before Confirm`);
+      throw new Error(`The database was used (${String(property)})`);
     },
   },
 ) as unknown as Db;
 
-describe('chat tools', () => {
-  it('gives viewers read-only tools', () => {
-    const names = toolsFor(viewer).map((tool) => tool.name);
-    expect(names.sort()).toEqual(['get_bot', 'get_status', 'list_bots', 'search_items']);
-    expect(names.some(isMutatingTool)).toBe(false);
-  });
-
-  it('gives owners and operators every tool, each mutating one with a confirm flag', () => {
-    const tools = toolsFor(owner);
-    expect(tools).toHaveLength(10);
-    for (const tool of tools.filter((entry) => isMutatingTool(entry.name))) {
-      const schema = tool.input_schema as {
-        properties?: Record<string, unknown>;
-        required?: string[];
-      };
-      expect(schema.properties?.confirm, tool.name).toBeDefined();
-      expect(schema.required, tool.name).toContain('confirm');
+describe('chat actions', () => {
+  it('a viewer cannot confirm an action, even one saved in their own chat', async () => {
+    for (const tool of ['start_bot', 'stop_all', 'approve_items', 'update_bot_settings'] as const) {
+      const result = await confirmAction(untouchable, viewer, {
+        tool,
+        input: {},
+        title: 'x',
+        lines: [],
+      });
+      expect(result.ok, tool).toBe(false);
     }
   });
 
-  it('refuses a mutating tool for a viewer even if the model calls it', async () => {
-    for (const name of ['start_bot', 'stop_all', 'approve_items', 'update_bot_settings']) {
-      const outcome = await runChatTool(noWrites, viewer, name, { confirm: true });
-      expect(outcome.kind === 'result' && outcome.isError, name).toBe(true);
+  it('checks a confirmed action again before running it', async () => {
+    // inputs that do not fit the tool are refused before the database is touched
+    const cases: [PendingAction['tool'], Record<string, unknown>][] = [
+      ['start_bot', {}],
+      ['stop_run', { run_id: 'not-a-uuid' }],
+      ['set_bot_enabled', { slug: 'job-scout' }],
+      ['update_bot_settings', { slug: 'job-scout', settings: 'oops' }],
+      ['approve_items', { ids: [] }],
+    ];
+    for (const [tool, input] of cases) {
+      const result = await confirmAction(untouchable, owner, {
+        tool,
+        input,
+        title: 'x',
+        lines: [],
+      });
+      expect(result, tool).toEqual({ ok: false, message: 'That action is no longer valid.' });
     }
-  });
-
-  it('never executes an action from the model, even with confirm=true: it only previews', async () => {
-    const outcome = await runChatTool(noWrites, owner, 'stop_all', { confirm: true });
-    expect(outcome.kind).toBe('preview');
-    if (outcome.kind === 'preview') {
-      expect(outcome.action.tool).toBe('stop_all');
-      expect(outcome.text).toMatch(/Nothing has happened yet/);
-    }
-  });
-
-  it('rejects an unknown tool', async () => {
-    const outcome = await runChatTool(noWrites, owner, 'drop_database', {});
-    expect(outcome.kind === 'result' && outcome.isError).toBe(true);
   });
 });
 
 describe('chat history', () => {
-  const row = (role: string, content: unknown, id = 'r1'): ChatMessageRow => ({
-    id,
-    user_id: 'u1',
-    role,
-    content: content as ChatMessageRow['content'],
-    created_at: '2026-11-26T12:00:00Z',
-  });
+  const row = (role: string, content: unknown, id = 'r1') => ({ id, role, content });
 
   it('reads stored rows and ignores anything malformed', () => {
-    expect(entryFromRow(row('user', { text: 'hi' }))).toEqual({
+    expect(chatEntryFromRow(row('user', { text: 'hi', status: 'waiting' }))).toEqual({
       id: 'r1',
       role: 'user',
       text: 'hi',
+      status: 'waiting',
     });
-    expect(entryFromRow(row('assistant', { text: 'hello', cards: [] }))).toMatchObject({
+    expect(chatEntryFromRow(row('user', { text: 'old message' }))).toMatchObject({
+      status: 'done',
+    });
+    expect(chatEntryFromRow(row('assistant', { text: 'hello', cards: [] }))).toMatchObject({
       role: 'assistant',
     });
-    expect(entryFromRow(row('user', 'just a string'))).toBeNull();
-    expect(entryFromRow(row('system', { text: 'x' }))).toBeNull();
+    expect(chatEntryFromRow(row('user', 'just a string'))).toBeNull();
+    expect(chatEntryFromRow(row('system', { text: 'x' }))).toBeNull();
+    // an action row for a tool that does not exist is not shown, so it can never be confirmed
+    expect(
+      chatEntryFromRow(row('action', { tool: 'drop_database', input: {}, title: 'x', lines: [] })),
+    ).toBeNull();
   });
 
-  it('replays plain text only, starting with the user and merging neighbours', () => {
+  it('replays plain text only, with notes for what the user confirmed', () => {
     const entries: ChatEntry[] = [
-      { id: '0', role: 'assistant', text: 'orphan', cards: [] },
-      { id: '1', role: 'user', text: 'run find positions' },
+      { id: '1', role: 'user', text: 'run find positions', status: 'done' },
       { id: '2', role: 'assistant', text: 'Tap Confirm to start.', cards: [] },
       {
         id: '3',
@@ -101,20 +102,27 @@ describe('chat history', () => {
           result: 'Started Find positions in the market',
         },
       },
-      { id: '4', role: 'user', text: 'thanks' },
     ];
-    const messages = historyForModel(entries);
-    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
-    expect(messages[2]!.content).toContain('the user tapped Confirm');
-    expect(messages[2]!.content).toContain('thanks');
+    const prompt = chatPrompt(entries, 'thanks, what is running now?');
+    expect(prompt).toContain('User: run find positions');
+    expect(prompt).toContain('Assistant: Tap Confirm to start.');
+    expect(prompt).toContain('the user tapped Confirm');
+    expect(prompt.trimEnd().endsWith('thanks, what is running now?')).toBe(true);
+    expect(chatPrompt([], 'hello')).toBe("The user's new message:\nhello");
   });
 
-  it('tells the model the date, the time zone and what the user may do', () => {
-    const prompt = chatSystemPrompt(viewer);
+  it('tells Claude the date, the time zone and what the user may do', () => {
+    const prompt = chatSystemPrompt('viewer');
     expect(prompt).toContain('You are the FGV Control Panel assistant for John, Chris and Fabi.');
     expect(prompt).toContain('America/Sao_Paulo');
     expect(prompt).toMatch(/viewer/);
-    expect(chatSystemPrompt(owner)).toMatch(/an owner/);
+    expect(chatSystemPrompt('owner')).toMatch(/an owner/);
+  });
+
+  it('knows which chat tools change things', () => {
+    expect(MUTATING_CHAT_TOOLS).toHaveLength(6);
+    expect(isMutatingChatTool('stop_all')).toBe(true);
+    expect(isMutatingChatTool('get_status')).toBe(false);
   });
 });
 

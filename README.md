@@ -18,15 +18,15 @@ database; a worker computer picks it up. More computers = more bots at once.
 
 Everything else is already built. These steps need your accounts or your hands.
 
-| When              | What you do                                                             | Time        |
-| ----------------- | ----------------------------------------------------------------------- | ----------- |
-| Step 1            | Create a Supabase project, paste the URL and keys                       | 5 min       |
-| Step 3            | Create an Anthropic API key, set a monthly limit                        | 5 min       |
-| Step 5            | Sign in to LinkedIn, Indeed, Workable, Gmail in the bots' Chrome window | 10 min      |
-| Step 6            | Copy your CV, photo and profile.json into `apps/worker/assets/`         | 2 min       |
-| Step 7            | Vercel account, connect GitHub, paste the keys                          | 15 min      |
-| Step 8            | Install the worker on each computer                                     | 15 min each |
-| Step 9 (optional) | Google service account for the Sales Queue sheet                        | 10 min      |
+| When              | What you do                                                              | Time        |
+| ----------------- | ------------------------------------------------------------------------ | ----------- |
+| Step 1            | Create a Supabase project, paste the URL and keys                        | 5 min       |
+| Step 3            | Log in to Claude on each worker computer (your subscription; no API key) | 5 min       |
+| Step 5            | Sign in to LinkedIn, Indeed, Workable, Gmail in the bots' Chrome window  | 10 min      |
+| Step 6            | Copy your CV, photo and profile.json into `apps/worker/assets/`          | 2 min       |
+| Step 7            | Vercel account, connect GitHub, paste the keys                           | 15 min      |
+| Step 8            | Install the worker on each computer                                      | 15 min each |
+| Step 9 (optional) | Google service account for the Sales Queue sheet                         | 10 min      |
 
 You need on your computer: **Node.js LTS** (nodejs.org), **Git**, and **pnpm**
 (`npm install -g pnpm`). Then, in this folder:
@@ -93,17 +93,45 @@ owner changes their role in **Settings > Users**.
 
 You should see the Home screen with 8 bot cards grouped by channel.
 
-## Step 3 - Anthropic key (Claude)
+## Step 3 - Claude access (no API key needed)
 
-1. Go to **console.anthropic.com** > **API keys** > **Create key**.
-2. In **Settings > Limits** set a monthly spend limit you are comfortable with.
-3. Put the key in `apps/web/.env.local` as `ANTHROPIC_API_KEY=` (this powers the
-   chat). Restart `pnpm --filter @fgv/web dev`.
+The bots and the chat run on your worker computers and use **that computer's
+own Claude access**. The web app holds no Claude key at all. Per computer, pick
+one:
 
-The models are set in the env files and nowhere else:
-`CLAUDE_MODEL` (default `claude-opus-5-5`, used for bots that write, judge or
-apply) and `CLAUDE_MODEL_FAST` (default `claude-sonnet-5-5`, for cheap scouting).
-Leave them empty to use the defaults.
+1. **Your Claude subscription, by logging in (simplest).** Install Claude Code
+   on the computer (`npm install -g @anthropic-ai/claude-code`), run `claude`
+   once and log in with your claude.ai account. Leave both Claude lines in
+   `apps/worker/.env` empty.
+2. **Your Claude subscription, by token.** On a computer where you do not want
+   to log in by hand, run `claude setup-token` on any logged-in computer, and
+   paste the token it prints as `CLAUDE_CODE_OAUTH_TOKEN=` in that worker's
+   `.env`. The token lasts one year. Treat it like a password.
+3. **A pay-per-use API key.** Only if you ever want it: set `ANTHROPIC_API_KEY=`.
+   If that line is filled in it is always used, even on a logged-in computer.
+
+The worker prints which one it is using when it starts ("Claude access: ...").
+
+Things to know about running on a subscription:
+
+- Your plan's usage limits apply, and every computer on the same account
+  shares them. When the limit is reached, runs fail with "Claude is not
+  available: ... usage limit" and work again after it resets. More computers
+  do not mean more usage allowance.
+- The "cost" and "spend today" numbers are **estimates** of what the same work
+  would cost on the API. They are not money charged to you. The daily cap in
+  Settings still stops new runs when the estimate reaches it.
+- Anthropic's Agent SDK docs say: "Unless previously approved, Anthropic does
+  not allow third party developers to offer claude.ai login or rate limits for
+  their products, including agents built on the Claude Agent SDK." Running
+  this on your own computers with your own login is one thing; offering it to
+  other people on your login, or on theirs, is what that sentence is about.
+  Check with Anthropic before you do that.
+
+The models are set in `apps/worker/.env` and nowhere else: `CLAUDE_MODEL`
+(default `claude-opus-5-5`, for bots that write, judge or apply, and for the
+chat) and `CLAUDE_MODEL_FAST` (default `claude-sonnet-5-5`, for cheap
+scouting). Leave them empty to use the defaults.
 
 ## Step 4 - Start a worker on this computer
 
@@ -112,7 +140,8 @@ Leave them empty to use the defaults.
    ```
    SUPABASE_URL=                 <- same Project URL
    SUPABASE_SERVICE_ROLE_KEY=    <- same Secret key
-   ANTHROPIC_API_KEY=            <- same Anthropic key
+   CLAUDE_CODE_OAUTH_TOKEN=      <- leave empty to use this computer's Claude login (Step 3)
+   ANTHROPIC_API_KEY=            <- leave empty
    WORKER_NAME=pichau-desktop    <- a short name for this computer
    WORKER_MAX_CONCURRENCY=3
    WORKER_HAS_BROWSER=true
@@ -176,10 +205,10 @@ profile that contains one.
 1. Go to **vercel.com**, sign in with GitHub, **Add New > Project**, pick this
    repository.
 2. Set **Root Directory** to `apps/web`. Framework: Next.js (detected).
-3. Under **Environment Variables** add the same five values as in
+3. Under **Environment Variables** add the same three values as in
    `apps/web/.env.local` (`NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
-   `ANTHROPIC_API_KEY`, and optionally the two model names).
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+   No Claude key goes to Vercel.
 4. Press **Deploy**. You get an address like `https://fgv-control-panel.vercel.app`.
 5. Back in Supabase: **Authentication > URL Configuration**. Set **Site URL** to
    that address and add `https://your-address/auth/confirm` under **Redirect URLs**.
@@ -282,6 +311,8 @@ Notes, Last updated). Rows are matched by Link, so there are no duplicates.
 - **Chat** (speech-bubble button) - ask "what's waiting for me?" or "run find
   positions for SEO managers in the UAE, 10 results". Anything that starts,
   stops or changes something shows a card with a **Confirm** button first.
+  A worker computer answers, so at least one must be online, and a reply takes
+  about 10-20 seconds.
 - **Stop all** (red, top right) - stops every running bot within about 15
   seconds and blocks new runs until you press **Resume**.
 
@@ -396,21 +427,24 @@ docs/VERIFIED.md    what was checked against the official docs, and what changed
 
 ## If something goes wrong
 
-| What you see                            | What to do                                                                                                                           |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| "Almost there" page                     | The Supabase keys are missing from `apps/web/.env.local` (or Vercel). Step 1.                                                        |
-| The login email never arrives           | Check spam. Supabase's built-in email is limited to a few per hour; for regular use add your own SMTP under Authentication > Emails. |
-| "That login link has expired"           | Links work once. Ask for a new one, or type the 6-digit code instead.                                                                |
-| A run stays "Queued"                    | No worker is online, or the only free worker has no browser, or it is paused. Check the Workers page.                                |
-| "All bots are stopped" banner           | Someone pressed Stop all. Press **Resume**.                                                                                          |
-| "Daily spend cap reached"               | Raise the cap in Settings, or wait until tomorrow (America/Sao_Paulo).                                                               |
-| A browser bot says a site wants a login | Run `pnpm worker:login` on that computer and sign in again.                                                                          |
-| A worker shows Offline                  | On that computer: `pm2 status`, then `pm2 logs fgv-worker`.                                                                          |
-| Chat says it needs a key                | Add `ANTHROPIC_API_KEY` to the web app's settings and redeploy.                                                                      |
+| What you see                                 | What to do                                                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| "Almost there" page                          | The Supabase keys are missing from `apps/web/.env.local` (or Vercel). Step 1.                                                        |
+| The login email never arrives                | Check spam. Supabase's built-in email is limited to a few per hour; for regular use add your own SMTP under Authentication > Emails. |
+| "That login link has expired"                | Links work once. Ask for a new one, or type the 6-digit code instead.                                                                |
+| A run stays "Queued"                         | No worker is online, or the only free worker has no browser, or it is paused. Check the Workers page.                                |
+| "All bots are stopped" banner                | Someone pressed Stop all. Press **Resume**.                                                                                          |
+| "Daily spend cap reached"                    | Raise the cap in Settings, or wait until tomorrow (America/Sao_Paulo).                                                               |
+| A browser bot says a site wants a login      | Run `pnpm worker:login` on that computer and sign in again.                                                                          |
+| A worker shows Offline                       | On that computer: `pm2 status`, then `pm2 logs fgv-worker`.                                                                          |
+| Chat says no computer is online              | Start a worker. The chat is answered by the worker computers.                                                                        |
+| "Claude is not available: ... usage limit"   | Your Claude plan's limit is used up for now. It resets by itself.                                                                    |
+| "Claude is not available: ... not signed in" | Run `claude` on that computer and log in again.                                                                                      |
 
 ## Costs
 
-Supabase and Vercel free tiers are enough for the demo. Claude usage is billed
-by Anthropic per use: the app shows the cost per run and per day, refuses new
-runs past the daily spend cap (default USD 30, in Settings), and you should
-also set a monthly limit in the Anthropic Console.
+Supabase and Vercel free tiers are enough for the demo. Claude runs on your
+subscription through the worker computers, so there is no per-use bill; your
+plan's usage limits apply instead. The cost numbers in the app are estimates
+(see Step 3). If you ever switch a worker to an API key, that worker's usage
+is billed per use by Anthropic, so set a monthly limit in the Anthropic Console.

@@ -235,6 +235,7 @@ export type Database = {
         Args: { p_worker: string; p_has_browser: boolean };
         Returns: RunRow | null;
       };
+      claim_next_chat: { Args: { p_worker: string }; Returns: ChatMessageRow | null };
       bot_actions_today: { Args: { p_bot: string }; Returns: number };
       linkedin_sent_today: { Args: Record<never, never>; Returns: number };
       spend_today: { Args: Record<never, never>; Returns: number };

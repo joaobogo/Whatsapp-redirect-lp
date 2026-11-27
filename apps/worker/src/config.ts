@@ -18,7 +18,9 @@ const flag = z
 const envSchema = z.object({
   SUPABASE_URL: z.url('SUPABASE_URL must be the project URL (https://....supabase.co)'),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20, 'SUPABASE_SERVICE_ROLE_KEY is missing'),
-  ANTHROPIC_API_KEY: z.string().min(10, 'ANTHROPIC_API_KEY is missing'),
+  // Optional. Leave both empty to use this computer's own Claude login (subscription).
+  ANTHROPIC_API_KEY: z.string().optional(),
+  CLAUDE_CODE_OAUTH_TOKEN: z.string().optional(),
   // Model strings are never hard-coded outside env/config (spec section 3).
   CLAUDE_MODEL: z.string().min(1).default('claude-opus-5-5'),
   CLAUDE_MODEL_FAST: z.string().min(1).default('claude-sonnet-5-5'),
@@ -47,6 +49,8 @@ export interface WorkerConfig {
   serviceRoleKey: string;
   claudeModel: string;
   claudeModelFast: string;
+  /** how this computer reaches Claude */
+  claudeAccess: 'login' | 'token' | 'api-key';
   workerName: string;
   maxConcurrency: number;
   hasBrowser: boolean;
@@ -93,6 +97,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     );
   }
   const values = parsed.data;
+  // An empty "ANTHROPIC_API_KEY=" line must not count as a key: a key always
+  // wins over the Claude login, so an empty one would break the login.
+  for (const name of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'] as const) {
+    if (!env[name]?.trim()) delete env[name];
+  }
+  const claudeAccess = env.ANTHROPIC_API_KEY
+    ? 'api-key'
+    : env.CLAUDE_CODE_OAUTH_TOKEN
+      ? 'token'
+      : 'login';
   const sheets =
     values.GOOGLE_SERVICE_ACCOUNT_JSON && values.SALES_QUEUE_SHEET_ID
       ? {
@@ -106,6 +120,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     serviceRoleKey: values.SUPABASE_SERVICE_ROLE_KEY,
     claudeModel: values.CLAUDE_MODEL,
     claudeModelFast: values.CLAUDE_MODEL_FAST,
+    claudeAccess,
     workerName: values.WORKER_NAME,
     maxConcurrency: values.WORKER_MAX_CONCURRENCY,
     hasBrowser: values.WORKER_HAS_BROWSER,

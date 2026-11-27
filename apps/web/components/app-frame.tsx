@@ -14,14 +14,12 @@ export function AppFrame({
   canOperate,
   killSwitch,
   approvalsCount,
-  chatReady,
 }: {
   children: React.ReactNode;
   role: UserRole;
   canOperate: boolean;
   killSwitch: boolean;
   approvalsCount: number;
-  chatReady: boolean;
 }) {
   const [chatOpen, setChatOpen] = useState(false);
   return (
@@ -30,7 +28,7 @@ export function AppFrame({
       <AppShell role={role} approvalsCount={approvalsCount} onOpenChat={() => setChatOpen(true)}>
         {children}
       </AppShell>
-      <ChatDrawer open={chatOpen} onOpenChange={setChatOpen} ready={chatReady} />
+      <ChatDrawer open={chatOpen} onOpenChange={setChatOpen} />
       <RealtimeRefresh tables={['runs', 'items', 'workers', 'bots', 'app_settings']} />
     </>
   );

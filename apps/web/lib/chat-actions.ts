@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import type { Json } from '@fgv/shared';
+import { chatEntryFromRow, type ChatEntry, type Json, type StoredAction } from '@fgv/shared';
 import { getViewer } from '@/lib/auth';
-import { entryFromRow, loadHistory, type ChatEntry } from '@/lib/chat';
-import { confirmAction, type StoredAction } from '@/lib/chat-tools';
+import { loadHistory } from '@/lib/chat';
+import { confirmAction } from '@/lib/chat-tools';
 import { createClient } from '@/lib/supabase/server';
 
 export async function loadChatAction(): Promise<ChatEntry[]> {
@@ -34,7 +34,7 @@ async function settle(id: string, decision: 'confirm' | 'cancel'): Promise<Outco
     .eq('user_id', viewer.id)
     .eq('role', 'action')
     .maybeSingle();
-  const entry = row ? entryFromRow(row) : null;
+  const entry = row ? chatEntryFromRow(row) : null;
   if (!row || !entry || entry.role !== 'action') {
     return { ok: false, error: 'That card is no longer valid.' };
   }

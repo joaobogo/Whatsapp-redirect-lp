@@ -144,6 +144,10 @@ create table public.chat_messages (
   created_at timestamptz default now()
 );
 create index chat_messages_user_idx on public.chat_messages (user_id, created_at);
+-- chat questions waiting for a worker to answer (the chat runs on the workers'
+-- own Claude access, so the web app needs no API key)
+create index chat_messages_waiting_idx on public.chat_messages (created_at)
+  where role = 'user' and (content ->> 'status') = 'waiting';
 
 -- ---------------------------------------------------------------------------
 -- helpers
@@ -222,6 +226,22 @@ begin
   update runs set status = 'claimed', worker_id = p_worker, started_at = now()
    where id = r.id returning * into r;
   return r;
+end $$;
+
+-- atomic claim of the oldest chat question nobody is answering yet
+create function public.claim_next_chat(p_worker uuid)
+returns public.chat_messages language plpgsql security definer set search_path = public as $$
+declare m public.chat_messages;
+begin
+  select * into m from chat_messages
+   where role = 'user' and (content ->> 'status') = 'waiting'
+   order by created_at
+   for update skip locked limit 1;
+  if m.id is null then return null; end if;
+  update chat_messages
+     set content = content || jsonb_build_object('status', 'working', 'worker', p_worker::text)
+   where id = m.id returning * into m;
+  return m;
 end $$;
 
 -- count of contact actions today for a bot (for daily caps)
@@ -567,11 +587,14 @@ grant execute on function
   public.stop_all(), public.resume_all(), public.request_stop(uuid)
   to authenticated, service_role;
 grant execute on function public.claim_next_run(uuid, boolean) to service_role;
+grant execute on function public.claim_next_chat(uuid) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- realtime: pages update live without refresh
 -- (spec: runs, run_events, items, workers; bots and app_settings are added so
---  the schedule switch and the "All bots are stopped" banner are live too)
+--  the schedule switch and the "All bots are stopped" banner are live too;
+--  chat_messages so a chat answer appears as the worker writes it - own rows only)
 -- ---------------------------------------------------------------------------
 alter publication supabase_realtime add table
-  public.runs, public.run_events, public.items, public.workers, public.bots, public.app_settings;
+  public.runs, public.run_events, public.items, public.workers, public.bots, public.app_settings,
+  public.chat_messages;

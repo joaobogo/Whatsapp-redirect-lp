@@ -30,14 +30,5 @@ export function serviceRoleKey(): string {
   return value;
 }
 
-/** Model strings live only in env/config (spec section 3, "Models"). */
-export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
-export const DEFAULT_CLAUDE_MODEL_FAST = 'claude-sonnet-5-5';
-
-export function claudeModel(): string {
-  return process.env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL;
-}
-
-export function anthropicConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
-}
+// There is no Claude key here on purpose: the chat and the bots run on the
+// worker computers, with each computer's own Claude access.

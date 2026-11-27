@@ -11,22 +11,22 @@ and the change is listed again under "What changed and why".
 
 ## Packages and versions
 
-| Spec says                                                        | Status                             | Installed                                                                                            |
-| ---------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| pnpm workspaces + Turborepo                                      | confirmed                          | pnpm 10.28, turbo 2.11                                                                               |
-| Next.js latest stable, App Router, React, TypeScript             | confirmed                          | next 16.4.6, react 19.3                                                                              |
-| TypeScript strict mode                                           | confirmed, pinned to 6.0           | typescript 6.0.3. 7.0 is out but `typescript-eslint` only supports `<6.1`, so lint would break.      |
-| Tailwind CSS + shadcn/ui + lucide-react                          | confirmed, with one change (below) | tailwindcss 4.3, lucide-react 1.81, radix-ui 1.8                                                     |
-| react-hook-form + zod                                            | confirmed                          | react-hook-form 7.92, zod 4.6                                                                        |
-| `@supabase/supabase-js` and `@supabase/ssr`                      | confirmed                          | 2.119 and 0.12.7                                                                                     |
-| `@anthropic-ai/sdk`, streaming, tool use                         | confirmed                          | 1.14.0                                                                                               |
-| `@anthropic-ai/claude-agent-sdk`                                 | confirmed (name unchanged)         | 0.3.332 (peers: zod ^4, @anthropic-ai/sdk, @modelcontextprotocol/sdk)                                |
-| `@playwright/mcp` with a persistent user-data-dir, headed Chrome | confirmed                          | 0.0.86                                                                                               |
-| cron-parser                                                      | confirmed                          | 5.10 (`CronExpressionParser.parse(expr, { tz, currentDate }).prev()`)                                |
-| pm2 (+ pm2 startup / pm2-installer or NSSM on Windows)           | confirmed                          | pm2 7.1, installed globally per the README                                                           |
-| googleapis (service account)                                     | confirmed                          | 190.0                                                                                                |
-| Vitest, Playwright test                                          | confirmed                          | vitest 5.1, @playwright/test 1.65                                                                    |
-| ESLint                                                           | confirmed, pinned to 9             | eslint 9.39. ESLint 10 is out but the plugins inside `eslint-config-next` 16.4 only support up to 9. |
+| Spec says                                                        | Status                                                                          | Installed                                                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| pnpm workspaces + Turborepo                                      | confirmed                                                                       | pnpm 10.28, turbo 2.11                                                                               |
+| Next.js latest stable, App Router, React, TypeScript             | confirmed                                                                       | next 16.4.6, react 19.3                                                                              |
+| TypeScript strict mode                                           | confirmed, pinned to 6.0                                                        | typescript 6.0.3. 7.0 is out but `typescript-eslint` only supports `<6.1`, so lint would break.      |
+| Tailwind CSS + shadcn/ui + lucide-react                          | confirmed, with one change (below)                                              | tailwindcss 4.3, lucide-react 1.81, radix-ui 1.8                                                     |
+| react-hook-form + zod                                            | confirmed                                                                       | react-hook-form 7.92, zod 4.6                                                                        |
+| `@supabase/supabase-js` and `@supabase/ssr`                      | confirmed                                                                       | 2.119 and 0.12.7                                                                                     |
+| `@anthropic-ai/sdk`, streaming, tool use                         | confirmed, then **removed from the web app** (see "Claude access and the chat") | peer of the Agent SDK only                                                                           |
+| `@anthropic-ai/claude-agent-sdk`                                 | confirmed (name unchanged)                                                      | 0.3.332 (peers: zod ^4, @anthropic-ai/sdk, @modelcontextprotocol/sdk)                                |
+| `@playwright/mcp` with a persistent user-data-dir, headed Chrome | confirmed                                                                       | 0.0.86                                                                                               |
+| cron-parser                                                      | confirmed                                                                       | 5.10 (`CronExpressionParser.parse(expr, { tz, currentDate }).prev()`)                                |
+| pm2 (+ pm2 startup / pm2-installer or NSSM on Windows)           | confirmed                                                                       | pm2 7.1, installed globally per the README                                                           |
+| googleapis (service account)                                     | confirmed                                                                       | 190.0                                                                                                |
+| Vitest, Playwright test                                          | confirmed                                                                       | vitest 5.1, @playwright/test 1.65                                                                    |
+| ESLint                                                           | confirmed, pinned to 9                                                          | eslint 9.39. ESLint 10 is out but the plugins inside `eslint-config-next` 16.4 only support up to 9. |
 
 ## Claude Agent SDK (TypeScript) - `query()` options
 
@@ -81,15 +81,14 @@ Read from `npx @playwright/mcp --help` and its README.
 | row level security applies to what a signed-in browser receives     | confirmed |
 | filter by column (`run_id=eq.<id>`)                                 | confirmed |
 
-## Anthropic API (chat route)
+## Claude access and the chat
 
-| Assumption                                                      | Status                                                                                                                                                      |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| model ids `claude-opus-5-5` and `claude-sonnet-5-5`             | confirmed; read only from `CLAUDE_MODEL` / `CLAUDE_MODEL_FAST`                                                                                              |
-| `client.messages.stream()` + `finalMessage()`, manual tool loop | confirmed                                                                                                                                                   |
-| thinking                                                        | on `claude-opus-5-5` thinking cannot be disabled and `budget_tokens` is rejected; the chat sends no `thinking` field and sets `output_config.effort: 'low'` |
-| forced `tool_choice`                                            | not available on these models; not used                                                                                                                     |
-| `stop_reason: 'refusal'`                                        | handled: the chat shows one plain sentence. Server-side refusal fallback is a beta parameter and is not enabled.                                            |
+| Assumption                                                   | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| model ids `claude-opus-5-5` and `claude-sonnet-5-5`          | confirmed; read only from `CLAUDE_MODEL` / `CLAUDE_MODEL_FAST` in the worker's `.env`                                                                                                                                                                                                                                                                                                                                                                           |
+| workers authenticate with `ANTHROPIC_API_KEY`                | **changed at John's request: no API key.** The Agent SDK uses `ANTHROPIC_API_KEY` if set, then `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`, one year, subscription), then the computer's own Claude login. The worker leaves the key empty and reports which one is in use. Source: code.claude.com/docs/en/authentication.                                                                                                                            |
+| chat route calls the Anthropic Messages API from the web app | **changed: the chat runs on the workers.** The web app saves the question (`status: waiting`), a worker claims it (`claim_next_chat`), asks Claude through the Agent SDK with in-process tools, and writes the reply rows. The web app has no Claude key and no `@anthropic-ai/sdk` dependency. Tools that start, stop, change or approve still only save a preview card; the action runs in the web app with the user's own permissions when they tap Confirm. |
+| policy                                                       | The Agent SDK overview says: "Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products, including agents built on the Claude Agent SDK." One's own computers with one's own login is the documented `setup-token` use ("CI pipelines, scripts"); offering this to other people is what the sentence covers.                                                                       |
 
 ## What changed and why (tell John)
 
@@ -119,7 +118,10 @@ Read from `npx @playwright/mcp --help` and its README.
    signed-in viewer could have called `stop_all()`.
 7. **Schedules can hold several cron expressions separated by `;`**, because
    "nights and weekends" cannot be written as one expression.
-8. **`update_item` accepts `lock: true`**, which performs the conditional
+8. **No Claude API key anywhere, and the chat moved to the workers** (John's
+   request after the first build). See "Claude access and the chat" above.
+
+9. **`update_item` accepts `lock: true`**, which performs the conditional
    "lock it first" update that section 7.3 describes. The five tools are
    otherwise as specified.
 

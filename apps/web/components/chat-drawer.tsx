@@ -5,27 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowUp, Check, CircleAlert, Loader2, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { CHAT_TIMEOUT_SECONDS, type ChatCard, type ChatEntry } from '@fgv/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/input';
-import type { ChatEntry } from '@/lib/chat';
 import {
   cancelChatAction,
   clearChatAction,
   confirmChatAction,
   loadChatAction,
 } from '@/lib/chat-actions';
-import type { ChatCard } from '@/lib/chat-tools';
 import { cn } from '@/lib/utils';
-
-type StreamEvent =
-  | { type: 'user'; entry: ChatEntry }
-  | { type: 'text'; text: string }
-  | { type: 'card'; card: ChatCard }
-  | { type: 'action'; entry: ChatEntry }
-  | { type: 'assistant'; entry: ChatEntry }
-  | { type: 'error'; message: string }
-  | { type: 'done' };
 
 const SUGGESTIONS = [
   "What's waiting for me?",
@@ -33,35 +23,45 @@ const SUGGESTIONS = [
   'Run find positions for SEO managers in the UAE, 10 results',
 ];
 
+const POLL_MS = 1200;
+
+function isOpenRequest(entry: ChatEntry): boolean {
+  return entry.role === 'user' && (entry.status === 'waiting' || entry.status === 'working');
+}
+
 /**
  * Chat with Claude on every page: a right-side drawer on desktop, a full-screen
- * sheet on a phone. Actions arrive as cards with a Confirm button.
+ * sheet on a phone. A worker computer answers (with its own Claude access), so
+ * the drawer saves the question and then watches the chat for the reply.
+ * Actions arrive as cards with a Confirm button.
  */
 export function ChatDrawer({
   open,
   onOpenChange,
-  ready,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  ready: boolean;
 }) {
   const router = useRouter();
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState('');
-  const [streaming, setStreaming] = useState(false);
-  const [live, setLive] = useState<{ text: string; cards: ChatCard[] } | null>(null);
+  const [sending, setSending] = useState(false);
+  // true while a question is with a worker and the reply has not finished
+  const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const abort = useRef<AbortController | null>(null);
+  const sent = useRef(0);
 
   useEffect(() => {
     if (!open || loaded) return;
     let cancelled = false;
     loadChatAction()
       .then((history) => {
-        if (!cancelled) setEntries(history);
+        if (cancelled) return;
+        setEntries(history);
+        // a question asked earlier may still be waiting for a computer
+        if (history.some(isOpenRequest)) setWaiting(true);
       })
       .catch(() => {
         if (!cancelled) setError('The earlier messages could not be loaded.');
@@ -74,11 +74,36 @@ export function ChatDrawer({
     };
   }, [open, loaded]);
 
+  // while a question is open, watch the chat for the worker's reply
+  useEffect(() => {
+    if (!open || !waiting) return;
+    let stopped = false;
+    let polls = 0;
+    const timer = setInterval(() => {
+      polls += 1;
+      loadChatAction()
+        .then((history) => {
+          if (stopped) return;
+          setEntries(history);
+          if (!history.some(isOpenRequest)) {
+            setWaiting(false);
+            router.refresh();
+          } else if (polls * POLL_MS > CHAT_TIMEOUT_SECONDS * 1000) {
+            setWaiting(false);
+            setError('No computer has answered yet. Check the Workers page, then ask again.');
+          }
+        })
+        .catch(() => undefined);
+    }, POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [open, waiting, router]);
+
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
-  }, [entries, live, open]);
-
-  useEffect(() => () => abort.current?.abort(), []);
+  }, [entries, waiting, open]);
 
   const upsert = useCallback((entry: ChatEntry) => {
     setEntries((current) =>
@@ -90,95 +115,58 @@ export function ChatDrawer({
 
   async function send(text: string) {
     const message = text.trim();
-    if (!message || streaming) return;
+    if (!message || sending || waiting) return;
     setDraft('');
     setError(null);
-    setStreaming(true);
-    setLive({ text: '', cards: [] });
-    const tempId = `temp-${Date.now()}`;
-    setEntries((current) => [...current, { id: tempId, role: 'user', text: message }]);
-    abort.current = new AbortController();
-
+    setSending(true);
+    sent.current += 1;
+    const tempId = `temp-${sent.current}`;
+    setEntries((current) => [
+      ...current,
+      { id: tempId, role: 'user', text: message, status: 'waiting' },
+    ]);
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message }),
-        signal: abort.current.signal,
       });
-      if (!response.ok || !response.body) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      const body = (await response.json().catch(() => null)) as {
+        id?: string;
+        error?: string;
+      } | null;
+      if (!response.ok || !body?.id) {
         throw new Error(body?.error ?? 'The chat is not available right now. Try again.');
       }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const handle = (event: StreamEvent) => {
-        switch (event.type) {
-          case 'user':
-            setEntries((current) =>
-              current.map((entry) => (entry.id === tempId ? event.entry : entry)),
-            );
-            break;
-          case 'text':
-            setLive((current) => ({
-              text: (current?.text ?? '') + event.text,
-              cards: current?.cards ?? [],
-            }));
-            break;
-          case 'card':
-            setLive((current) => ({
-              text: current?.text ?? '',
-              cards: [...(current?.cards ?? []), event.card],
-            }));
-            break;
-          case 'action':
-            upsert(event.entry);
-            break;
-          case 'assistant':
-            setLive(null);
-            upsert(event.entry);
-            break;
-          case 'error':
-            setError(event.message);
-            break;
-          case 'done':
-            break;
-        }
-      };
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          if (line.trim()) handle(JSON.parse(line) as StreamEvent);
-        }
-      }
+      setEntries((current) =>
+        current.map((entry) => (entry.id === tempId ? { ...entry, id: body.id! } : entry)),
+      );
+      setWaiting(true);
     } catch (failure) {
-      if (!(failure instanceof DOMException && failure.name === 'AbortError')) {
-        setError(
-          failure instanceof Error && failure.message
-            ? failure.message
-            : 'The chat stopped unexpectedly. Try again.',
-        );
-      }
+      setEntries((current) => current.filter((entry) => entry.id !== tempId));
+      setDraft(message);
+      setError(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : 'Could not reach the server. Check your connection and try again.',
+      );
     } finally {
-      setLive(null);
-      setStreaming(false);
-      abort.current = null;
+      setSending(false);
     }
   }
 
   async function clear() {
     await clearChatAction();
     setEntries([]);
+    setWaiting(false);
     setError(null);
   }
 
-  const empty = loaded && entries.length === 0 && !live;
+  const busy = sending || waiting;
+  const empty = loaded && entries.length === 0;
+  const last = entries.at(-1);
+  // show "Thinking..." until the reply starts to arrive
+  const thinking = waiting && (!last || last.role === 'user');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -188,18 +176,12 @@ export function ChatDrawer({
         description="Ask about your bots, or ask to run one."
       >
         <div className="min-h-0 flex-1 overflow-y-auto p-4" data-testid="chat-messages">
-          {!ready ? (
-            <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-              The chat needs an Anthropic API key. Add ANTHROPIC_API_KEY to the web app&apos;s
-              settings, then reload.
-            </p>
-          ) : null}
           {!loaded ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" /> Loading...
             </p>
           ) : null}
-          {empty && ready ? (
+          {empty ? (
             <div className="flex flex-col gap-2">
               <p className="text-sm text-muted-foreground">Try one of these:</p>
               {SUGGESTIONS.map((suggestion) => (
@@ -228,9 +210,9 @@ export function ChatDrawer({
                 />
               </li>
             ))}
-            {live ? (
+            {thinking ? (
               <li>
-                <AssistantBubble text={live.text} cards={live.cards} typing />
+                <AssistantBubble text="" cards={[]} typing />
               </li>
             ) : null}
           </ol>
@@ -238,6 +220,7 @@ export function ChatDrawer({
             <p
               className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm"
               role="alert"
+              data-testid="chat-error"
             >
               <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
               {error}
@@ -259,7 +242,7 @@ export function ChatDrawer({
               variant="ghost"
               size="icon"
               aria-label="Clear the chat"
-              disabled={streaming}
+              disabled={busy}
               onClick={() => void clear()}
             >
               <Trash2 />
@@ -271,7 +254,6 @@ export function ChatDrawer({
             rows={1}
             className="max-h-32 min-h-11 flex-1 resize-none py-2.5"
             value={draft}
-            disabled={!ready}
             enterKeyHint="send"
             data-testid="chat-input"
             onChange={(event) => setDraft(event.target.value)}
@@ -286,10 +268,10 @@ export function ChatDrawer({
             type="submit"
             size="icon"
             aria-label="Send"
-            disabled={!ready || streaming || draft.trim().length === 0}
+            disabled={busy || draft.trim().length === 0}
             data-testid="chat-send"
           >
-            {streaming ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+            {busy ? <Loader2 className="animate-spin" /> : <ArrowUp />}
           </Button>
         </form>
       </DialogContent>

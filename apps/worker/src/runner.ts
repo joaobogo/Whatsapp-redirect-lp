@@ -23,6 +23,7 @@ import {
   type TokenUsage,
 } from '@fgv/shared';
 import { ALLOWED_BROWSER_TOOLS, PLAYWRIGHT_SERVER, playwrightServerConfig } from './browser';
+import { claudeAccessHint } from './chat';
 import { WORKER_ROOT, loadApplicantProfile, type WorkerConfig } from './config';
 import type { Db } from './db';
 import { ToolGuard } from './guard';
@@ -352,6 +353,13 @@ export async function executeRun(deps: RunDeps, run: RunRow): Promise<RunOutcome
   } catch (error) {
     failure = errorMessage(error);
   } finally {
+    // a usage limit or a missing Claude login reads better as one plain sentence
+    if (
+      failure &&
+      /hit your|reached your|out of usage|usage limit|not logged|log ?in|oauth|401/i.test(failure)
+    ) {
+      failure = `Claude is not available: ${claudeAccessHint(failure)}`;
+    }
     for (const timer of timers) {
       clearInterval(timer);
       clearTimeout(timer);

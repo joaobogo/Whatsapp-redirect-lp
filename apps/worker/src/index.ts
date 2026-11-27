@@ -1,6 +1,7 @@
 // FGV worker: registers this computer, sends a heartbeat, claims queued runs
 // and runs them with the Claude Agent SDK (spec section 10).
-import type { RunRow, WorkerRow } from '@fgv/shared';
+import type { Json, RunRow, WorkerRow } from '@fgv/shared';
+import { chatTick } from './chat';
 import { claimNextRun } from './claim';
 import { loadConfig, type WorkerConfig } from './config';
 import { createDb, type Db } from './db';
@@ -14,6 +15,13 @@ import { LOCK_PREFIX } from './tools';
 const HEARTBEAT_MS = 30_000;
 const LOOP_MS = 5_000;
 const SCHEDULER_MS = 60_000;
+const CHAT_MS = 2_000;
+
+const ACCESS_LABEL = {
+  login: "this computer's Claude login (subscription)",
+  token: 'a Claude subscription token',
+  'api-key': 'an Anthropic API key (pay per use)',
+} as const;
 
 interface ActiveRun {
   run: RunRow;
@@ -118,6 +126,21 @@ async function recoverFromCrash(db: Db, worker: WorkerRow): Promise<void> {
     logger.warn(`Run ${run.id} was interrupted by a restart`);
   }
 
+  // chat questions this worker was answering go back to the queue
+  const { data: chats } = await db
+    .from('chat_messages')
+    .select('id, content')
+    .eq('role', 'user')
+    .eq('content->>status', 'working')
+    .eq('content->>worker', worker.id);
+  for (const chat of chats ?? []) {
+    const content = (chat.content ?? {}) as Record<string, Json | undefined>;
+    await db
+      .from('chat_messages')
+      .update({ content: { ...content, status: 'waiting' } as Json })
+      .eq('id', chat.id);
+  }
+
   // release items this worker had claimed
   const { data: locked } = await db
     .from('items')
@@ -142,6 +165,7 @@ async function main(): Promise<void> {
     `Worker "${config.workerName}" v${config.version} is online ` +
       `(browser: ${config.hasBrowser ? 'yes' : 'no'}, scheduler: ${config.isScheduler ? 'yes' : 'no'})`,
   );
+  logger.info(`Claude access: ${ACCESS_LABEL[config.claudeAccess]}`);
 
   const active = new Map<string, ActiveRun>();
   const keepAwake = new KeepAwake();
@@ -212,9 +236,26 @@ async function main(): Promise<void> {
     }
   };
 
+  // the chat: answer one question at a time, even while bots are stopped or paused
+  let chatting = false;
+  const chat = async () => {
+    if (chatting || shuttingDown) return;
+    chatting = true;
+    try {
+      while (!shuttingDown && (await chatTick(db, config, worker.id))) {
+        // keep going while questions are waiting
+      }
+    } catch (error) {
+      logger.warn(`Chat: ${errorMessage(error)}`);
+    } finally {
+      chatting = false;
+    }
+  };
+
   const timers = [
     setInterval(() => void heartbeat(), HEARTBEAT_MS),
     setInterval(() => void loop(), LOOP_MS),
+    setInterval(() => void chat(), CHAT_MS),
   ];
   if (config.isScheduler) {
     const tick = () =>

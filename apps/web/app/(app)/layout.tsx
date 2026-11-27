@@ -1,6 +1,5 @@
 import { AppFrame } from '@/components/app-frame';
 import { canOperate, requireViewer } from '@/lib/auth';
-import { anthropicConfigured } from '@/lib/env';
 import { countWaitingApproval, getGlobalSettings } from '@/lib/data';
 import { createClient } from '@/lib/supabase/server';
 
@@ -20,7 +19,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       canOperate={canOperate(viewer.role)}
       killSwitch={settings.killSwitch}
       approvalsCount={approvalsCount}
-      chatReady={anthropicConfigured()}
     >
       {children}
     </AppFrame>

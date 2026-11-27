@@ -316,6 +316,25 @@ select pg_temp.expect(
   (public.claim_next_run('30000000-0000-0000-0000-000000000002', true)).id is not null,
   'the preferred worker claims it');
 
+-- 9b. chat questions are claimed once, by workers only ------------------------
+insert into public.chat_messages (user_id, role, content) values
+  ('00000000-0000-0000-0000-000000000002', 'user', '{"text": "what is running?", "status": "waiting"}'),
+  ('00000000-0000-0000-0000-000000000002', 'user', '{"text": "old question", "status": "done"}');
+select pg_temp.expect(
+  (select (c).content ->> 'status' = 'working' and (c).content ->> 'text' = 'what is running?'
+     from (select public.claim_next_chat('30000000-0000-0000-0000-000000000001') as c) x),
+  'a worker claims the waiting chat question');
+select pg_temp.expect(
+  public.claim_next_chat('30000000-0000-0000-0000-000000000002') is null,
+  'the same chat question is never claimed twice');
+set local role authenticated;
+select pg_temp.act_as('00000000-0000-0000-0000-000000000002', 'authenticated');
+select pg_temp.expect_error(
+  $q$select public.claim_next_chat(gen_random_uuid())$q$,
+  'a signed-in user calls claim_next_chat');
+reset role;
+select pg_temp.act_as(null, null);
+
 -- 10. people manage their own computers, and only theirs -----------------------
 update public.workers set owner_id = '00000000-0000-0000-0000-000000000003'
  where id = '30000000-0000-0000-0000-000000000001';
