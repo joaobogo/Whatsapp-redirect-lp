@@ -227,12 +227,25 @@ describe('worker settings', () => {
       workerName: 'pichau-desktop',
       maxConcurrency: 2,
       hasBrowser: true,
+      hasDesktop: false,
+      ownerEmail: null,
       isScheduler: true,
       claudeModel: 'claude-opus-5-5',
       claudeModelFast: 'claude-sonnet-5-5',
       sheets: null,
     });
     expect(config.browserProfileDir.endsWith('main')).toBe(true);
+  });
+
+  it('reads who the computer belongs to and whether it offers a full desktop', () => {
+    const config = loadConfig({
+      ...base,
+      WORKER_HAS_DESKTOP: 'true',
+      WORKER_OWNER_EMAIL: 'Chris@Example.com',
+    });
+    expect(config.hasDesktop).toBe(true);
+    expect(config.ownerEmail).toBe('chris@example.com');
+    expect(() => loadConfig({ ...base, WORKER_OWNER_EMAIL: 'not an email' })).toThrow();
   });
 
   it('treats a missing flag as false', () => {

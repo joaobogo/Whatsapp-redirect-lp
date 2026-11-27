@@ -116,6 +116,8 @@ Leave them empty to use the defaults.
    WORKER_NAME=pichau-desktop    <- a short name for this computer
    WORKER_MAX_CONCURRENCY=3
    WORKER_HAS_BROWSER=true
+   WORKER_HAS_DESKTOP=false      <- true if this computer also offers full desktop control
+   WORKER_OWNER_EMAIL=           <- login email of the person this computer belongs to
    WORKER_IS_SCHEDULER=true      <- true on ONE computer only (the always-on one)
    BROWSER_PROFILE_DIR=./profiles/main
    APPLICANT_PROFILE_JSON=./assets/profile.json
@@ -221,6 +223,21 @@ Start with the computer:
 and lets it sleep again when idle. Also set **sleep to Never while plugged
 in** in the system power settings, so scheduled runs are not missed.
 
+**Whose computer is it?** Each computer can belong to a person
+(`WORKER_OWNER_EMAIL`, or an owner picks them under **Belongs to** on the
+Workers page). People see their own computers first and can pause them or
+change how many runs they take, whatever their role. Only an owner can change
+someone else's computer or reassign one.
+
+**Full desktop or browser only?** The Workers page shows which each computer
+offers. Today every bot works through the browser or the web; the "full
+desktop" flag is recorded so desktop-control bots can be sent only to those
+computers when they are added.
+
+**Everyone shares one queue.** All computers pull from the same database, so
+however many are running, the same person or posting is never saved or
+contacted twice, and the daily caps count across all of them.
+
 Useful pm2 commands: `pm2 status`, `pm2 logs fgv-worker`, `pm2 restart fgv-worker`.
 
 **Check it worked:** the Workers page shows three computers online. Only one
@@ -260,7 +277,7 @@ Notes, Last updated). Rows are matched by Link, so there are no duplicates.
 - **Approvals** - everything waiting for your OK. Approve, Skip, or edit the
   draft then approve. Tick several and **Approve selected**.
 - **Results** - everything every bot found, with filters, search and CSV export.
-- **Workers** - which computers are online and what they are running.
+- **Workers** - which computers are online, whose they are, and what they are running.
 - **Settings** - users and roles, daily spend cap, LinkedIn daily cap, kill switch.
 - **Chat** (speech-bubble button) - ask "what's waiting for me?" or "run find
   positions for SEO managers in the UAE, 10 results". Anything that starts,

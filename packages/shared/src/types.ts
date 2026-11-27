@@ -81,6 +81,10 @@ export type WorkerRow = {
   name: string;
   status: WorkerStatus;
   has_browser: boolean;
+  /** The computer offers full desktop control, not only a browser. Recorded; no bot uses it yet. */
+  has_desktop: boolean;
+  /** Whose computer this is. They may pause it and set how many runs it takes. */
+  owner_id: string | null;
   is_scheduler: boolean;
   max_concurrency: number;
   active_runs: number;

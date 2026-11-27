@@ -189,6 +189,50 @@ test.describe('Phase 3 acceptance (local test database only)', () => {
     expect(download.suggestedFilename()).toMatch(/^fgv-results-\d{4}-\d{2}-\d{2}\.csv$/);
   });
 
+  test('people manage their own computers, and only theirs', async ({ page }) => {
+    // two computers register themselves (as the worker program would)
+    const now = new Date().toISOString();
+    const made = await fetch(`${supabaseUrl}/rest/v1/workers`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        apikey: serviceKey,
+        authorization: `Bearer ${serviceKey}`,
+        prefer: 'return=representation',
+      },
+      body: JSON.stringify([
+        { name: 'e2e-laptop', has_browser: true, has_desktop: false, last_heartbeat: now },
+        { name: 'e2e-desktop', has_browser: true, has_desktop: true, last_heartbeat: now },
+      ]),
+    });
+    expect(made.ok).toBe(true);
+
+    // the viewer logs in once so they exist, then the owner gives them the laptop
+    await logIn(page, VIEWER);
+    await page.context().clearCookies();
+    await logIn(page, OWNER);
+    await page.goto('/workers');
+    const laptop = page.getByTestId('worker-card').filter({ hasText: 'e2e-laptop' });
+    await expect(page.getByTestId('worker-card').filter({ hasText: 'e2e-desktop' })).toContainText(
+      'Full desktop',
+    );
+    await expect(laptop).toContainText('Browser only');
+    await laptop.getByLabel('Who e2e-laptop belongs to').selectOption({ label: 'e2e-viewer' });
+    await expect(laptop.getByText('e2e-viewer').first()).toBeVisible();
+
+    // the viewer sees it under "Your computers" and can pause it, but not the other one
+    await page.context().clearCookies();
+    await logIn(page, VIEWER);
+    await page.goto('/workers');
+    await expect(page.getByRole('heading', { name: 'Your computers' })).toBeVisible();
+    const mine = page.getByTestId('worker-card').filter({ hasText: 'e2e-laptop' });
+    await mine.getByRole('switch', { name: 'Pause e2e-laptop' }).click();
+    await expect(mine.getByText('Paused')).toBeVisible();
+    const other = page.getByTestId('worker-card').filter({ hasText: 'e2e-desktop' });
+    await expect(other.getByRole('switch')).toHaveCount(0);
+    await expect(other.getByLabel('Who e2e-desktop belongs to')).toHaveCount(0);
+  });
+
   test('a viewer cannot change anything', async ({ page }) => {
     await logIn(page, VIEWER);
     // no Stop all, Run now is disabled, schedule switches are disabled

@@ -337,19 +337,24 @@ export async function getApprovals(db: Db): Promise<ApprovalData> {
 
 export interface WorkerCardData {
   worker: WorkerRow;
+  /** name of the person this computer belongs to, if anyone */
+  ownerName: string | null;
   online: boolean;
   runs: { run: RunRow; botName: string }[];
 }
 
 export async function getWorkers(db: Db): Promise<WorkerCardData[]> {
-  const [workers, runs, bots] = await Promise.all([
+  const [workers, runs, bots, profiles] = await Promise.all([
     db.from('workers').select('*').order('name'),
     db.from('runs').select('*').in('status', ['claimed', 'running', 'stop_requested']),
     db.from('bots').select('id, name'),
+    db.from('profiles').select('id, full_name'),
   ]);
+  const people = new Map((profiles.data ?? []).map((person) => [person.id, person.full_name]));
   const botNames = new Map((bots.data ?? []).map((bot) => [bot.id, bot.name]));
   return (workers.data ?? []).map((worker) => ({
     worker,
+    ownerName: worker.owner_id ? (people.get(worker.owner_id) ?? 'Someone') : null,
     online: isWorkerOnline(worker.last_heartbeat),
     runs: (runs.data ?? [])
       .filter((run) => run.worker_id === worker.id)

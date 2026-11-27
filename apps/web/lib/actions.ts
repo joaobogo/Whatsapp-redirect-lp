@@ -169,21 +169,41 @@ export async function updateItemsAction(input: {
 
 // --- workers ---------------------------------------------------------------
 
+/**
+ * An app owner can change any computer and say whose it is. Anyone else can
+ * pause their own computers and set how many runs they take - nothing more.
+ * The database enforces the same rule (guard_workers).
+ */
 export async function updateWorkerAction(
   id: string,
-  patch: { max_concurrency?: number; paused?: boolean },
+  patch: { max_concurrency?: number; paused?: boolean; owner_id?: string | null },
 ): Promise<ActionResult> {
-  const session = await owner();
-  if ('error' in session) return fail(session.error);
+  const viewer = await getViewer();
+  if (!viewer) return fail('Please log in again.');
   const parsed = z
     .object({
       id: uuid,
       max_concurrency: z.number().int().min(1).max(20).optional(),
       paused: z.boolean().optional(),
+      owner_id: uuid.nullable().optional(),
     })
     .safeParse({ id, ...patch });
   if (!parsed.success) return fail('That value is not valid.');
   const { id: workerId, ...update } = parsed.data;
+
+  const db = await createClient();
+  const { data: worker } = await db
+    .from('workers')
+    .select('owner_id')
+    .eq('id', workerId)
+    .maybeSingle();
+  if (!worker) return fail('That computer does not exist.');
+  const isAppOwner = viewer.role === 'owner';
+  if (!isAppOwner && worker.owner_id !== viewer.id) {
+    return fail('You can only change your own computers.');
+  }
+  if (update.owner_id !== undefined && !isAppOwner) return fail(OWNER_ONLY);
+  const session = { db };
   const { error } = await session.db.from('workers').update(update).eq('id', workerId);
   if (error) return fail(error, 'Could not save. Try again.');
   revalidatePath('/workers');

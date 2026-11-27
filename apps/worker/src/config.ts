@@ -32,6 +32,8 @@ const envSchema = z.object({
     ),
   WORKER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(2),
   WORKER_HAS_BROWSER: flag,
+  WORKER_HAS_DESKTOP: flag,
+  WORKER_OWNER_EMAIL: z.union([z.literal(''), z.email()]).optional(),
   WORKER_IS_SCHEDULER: flag,
   BROWSER_PROFILE_DIR: z.string().default('./profiles/main'),
   APPLICANT_PROFILE_JSON: z.string().default('./assets/profile.json'),
@@ -48,6 +50,10 @@ export interface WorkerConfig {
   workerName: string;
   maxConcurrency: number;
   hasBrowser: boolean;
+  /** this computer offers full desktop control (recorded for routing; no bot uses it yet) */
+  hasDesktop: boolean;
+  /** login email of the person this computer belongs to, if set */
+  ownerEmail: string | null;
   isScheduler: boolean;
   /** absolute path of the persistent Chrome profile */
   browserProfileDir: string;
@@ -103,6 +109,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     workerName: values.WORKER_NAME,
     maxConcurrency: values.WORKER_MAX_CONCURRENCY,
     hasBrowser: values.WORKER_HAS_BROWSER,
+    hasDesktop: values.WORKER_HAS_DESKTOP,
+    ownerEmail: values.WORKER_OWNER_EMAIL ? values.WORKER_OWNER_EMAIL.toLowerCase() : null,
     isScheduler: values.WORKER_IS_SCHEDULER,
     browserProfileDir: resolveFromRoot(values.BROWSER_PROFILE_DIR),
     applicantProfilePath: resolveFromRoot(values.APPLICANT_PROFILE_JSON),

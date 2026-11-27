@@ -3,31 +3,42 @@
 import { useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Globe, Minus, Plus } from 'lucide-react';
+import { Globe, Minus, Monitor, Plus, User } from 'lucide-react';
 import { toast } from 'sonner';
 import type { RunRow, WorkerRow } from '@fgv/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Select } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { TimeAgo } from '@/components/time-ago';
 import { updateWorkerAction } from '@/lib/actions';
 
 export function WorkerCard({
   worker,
+  ownerName,
   online,
   runs,
-  isOwner,
+  canManage,
+  people,
 }: {
   worker: WorkerRow;
+  ownerName: string | null;
   online: boolean;
   runs: { run: RunRow; botName: string }[];
-  isOwner: boolean;
+  /** the app owner, or the person this computer belongs to */
+  canManage: boolean;
+  /** everyone who can be given a computer; only an app owner gets this list */
+  people: { id: string; name: string }[] | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const state = !online ? 'offline' : runs.length > 0 ? 'busy' : 'online';
 
-  const update = (patch: { max_concurrency?: number; paused?: boolean }) =>
+  const update = (patch: {
+    max_concurrency?: number;
+    paused?: boolean;
+    owner_id?: string | null;
+  }) =>
     startTransition(async () => {
       const result = await updateWorkerAction(worker.id, patch);
       if (result.ok) router.refresh();
@@ -53,10 +64,23 @@ export function WorkerCard({
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
-        <Badge variant="outline">
-          <Globe className="size-3" />
-          {worker.has_browser ? 'Has browser' : 'No browser'}
-        </Badge>
+        {worker.has_desktop ? (
+          <Badge variant="outline">
+            <Monitor className="size-3" />
+            Full desktop
+          </Badge>
+        ) : (
+          <Badge variant="outline">
+            <Globe className="size-3" />
+            {worker.has_browser ? 'Browser only' : 'No browser'}
+          </Badge>
+        )}
+        {ownerName ? (
+          <Badge variant="outline">
+            <User className="size-3" />
+            {ownerName}
+          </Badge>
+        ) : null}
         {worker.is_scheduler ? <Badge variant="outline">Runs the schedule</Badge> : null}
         {worker.paused ? <Badge variant="warning">Paused</Badge> : null}
       </div>
@@ -82,7 +106,7 @@ export function WorkerCard({
         </ul>
       ) : null}
 
-      {isOwner ? (
+      {canManage ? (
         <div className="flex flex-col gap-2 border-t pt-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm">Runs at the same time</span>
@@ -124,6 +148,25 @@ export function WorkerCard({
               aria-label={`Pause ${worker.name}`}
             />
           </label>
+          {people ? (
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Belongs to</span>
+              <Select
+                className="w-44"
+                value={worker.owner_id ?? ''}
+                disabled={pending}
+                aria-label={`Who ${worker.name} belongs to`}
+                onChange={(event) => update({ owner_id: event.target.value || null })}
+              >
+                <option value="">Nobody (shared)</option>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
         </div>
       ) : null}
     </Card>

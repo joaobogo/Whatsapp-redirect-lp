@@ -107,10 +107,13 @@ Read from `npx @playwright/mcp --help` and its README.
    The shadcn registry (ui.shadcn.com) was not reachable from the build
    machine. The components follow the shadcn structure and `components.json`
    is in place, so `npx shadcn add ...` works later from a normal computer.
-5. **Two database columns were added** to the spec's tables, both required by
-   spec features: `workers.paused` ("Pause this worker") and `items.acted_by`
+5. **Four database columns were added** to the spec's tables. Two are required
+   by spec features: `workers.paused` ("Pause this worker") and `items.acted_by`
    (so a daily cap counts the bot that sent or applied, not the bot that found
-   the item).
+   the item). Two were added at John's request after the first build, for the
+   plan to add more computers: `workers.owner_id` (people manage their own
+   computers) and `workers.has_desktop` (full desktop versus browser only;
+   recorded and shown, not used for routing until a desktop-control bot exists).
 6. **`stop_all()` checks the caller's role**, and `resume_all()` and
    `request_stop()` were added next to it. As written in the spec, any
    signed-in viewer could have called `stop_all()`.

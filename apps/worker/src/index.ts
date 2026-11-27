@@ -21,6 +21,19 @@ interface ActiveRun {
   done: Promise<void>;
 }
 
+/** The user id behind WORKER_OWNER_EMAIL, or null when it is not set or nobody has that login yet. */
+async function findOwnerId(db: Db, email: string | null): Promise<string | null> {
+  if (!email) return null;
+  try {
+    const { data } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const user = data?.users.find((entry) => entry.email?.toLowerCase() === email);
+    if (!user) logger.warn('WORKER_OWNER_EMAIL has not logged in to the app yet; no owner set.');
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Insert the workers row on first boot; afterwards the limits set in the app win over the .env. */
 async function registerWorker(db: Db, config: WorkerConfig): Promise<WorkerRow> {
   const { data: existing, error } = await db
@@ -33,15 +46,18 @@ async function registerWorker(db: Db, config: WorkerConfig): Promise<WorkerRow> 
   const facts = {
     status: 'online' as const,
     has_browser: config.hasBrowser,
+    has_desktop: config.hasDesktop,
     is_scheduler: config.isScheduler,
     active_runs: 0,
     last_heartbeat: new Date().toISOString(),
     version: config.version,
   };
   if (existing) {
+    // the owner set in the app wins; the .env only fills it in when nobody is set
+    const owner = existing.owner_id ?? (await findOwnerId(db, config.ownerEmail));
     const { data, error: failure } = await db
       .from('workers')
-      .update(facts)
+      .update({ ...facts, owner_id: owner })
       .eq('id', existing.id)
       .select('*')
       .single();
@@ -50,7 +66,12 @@ async function registerWorker(db: Db, config: WorkerConfig): Promise<WorkerRow> 
   }
   const { data, error: failure } = await db
     .from('workers')
-    .insert({ name: config.workerName, max_concurrency: config.maxConcurrency, ...facts })
+    .insert({
+      name: config.workerName,
+      max_concurrency: config.maxConcurrency,
+      owner_id: await findOwnerId(db, config.ownerEmail),
+      ...facts,
+    })
     .select('*')
     .single();
   if (failure || !data) throw new Error(`Could not register this worker: ${failure?.message}`);

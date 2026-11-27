@@ -1,9 +1,11 @@
 -- FGV Control Panel - initial schema (build spec section 5).
 --
 -- Apply once on a new Supabase project, then run supabase/seed.sql.
--- Two columns were added to the spec's tables, both needed by spec features:
---   workers.paused   - "Pause this worker" on the Workers page (6.7)
---   items.acted_by   - which bot sent / applied, so daily caps count the acting bot
+-- Columns added to the spec's tables:
+--   workers.paused      - "Pause this worker" on the Workers page (6.7)
+--   items.acted_by      - which bot sent / applied, so daily caps count the acting bot
+--   workers.owner_id    - whose computer it is, so people can manage their own computers
+--   workers.has_desktop - the computer offers full desktop control, not only a browser
 -- Everything else follows the spec. The starred safety rules of section 9 are
 -- enforced here as triggers, on top of the checks in the worker.
 
@@ -38,6 +40,8 @@ create table public.workers (
   name text unique not null,                    -- 'pichau-desktop', 'windows', 'chromebook'
   status text not null default 'offline',       -- online | busy | offline (offline = no heartbeat 90s)
   has_browser boolean not null default true,
+  has_desktop boolean not null default false,   -- full desktop control (recorded; no bot uses it yet)
+  owner_id uuid references public.profiles(id) on delete set null,  -- whose computer this is
   is_scheduler boolean not null default false,
   max_concurrency int not null default 2 check (max_concurrency between 1 and 20),
   active_runs int not null default 0,
@@ -347,6 +351,32 @@ end $$;
 create trigger bots_guard before insert or update on public.bots
   for each row execute function public.guard_bots();
 
+-- workers: a person may pause their own computers and set how many runs they
+-- take at once. Only an app owner may change whose computer it is.
+create function public.guard_workers() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.is_privileged() or public.app_role() = 'owner' then return new; end if;
+  if old.owner_id is distinct from auth.uid() then
+    raise exception 'You can only change your own computers' using errcode = '42501';
+  end if;
+  if new.owner_id is distinct from old.owner_id
+     or new.name is distinct from old.name
+     or new.has_browser is distinct from old.has_browser
+     or new.has_desktop is distinct from old.has_desktop
+     or new.is_scheduler is distinct from old.is_scheduler
+     or new.status is distinct from old.status
+     or new.active_runs is distinct from old.active_runs
+     or new.last_heartbeat is distinct from old.last_heartbeat
+     or new.version is distinct from old.version then
+    raise exception 'Only the pause switch and the number of runs can be changed' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+create trigger workers_guard before update on public.workers
+  for each row execute function public.guard_workers();
+
 -- runs: people can only queue a run for themselves, never while everything is
 -- stopped, and never past the daily spend cap
 create function public.guard_run_insert() returns trigger
@@ -502,7 +532,8 @@ create policy items_update on public.items for update to authenticated
   using ((select public.app_role()) in ('owner', 'operator'))
   with check ((select public.app_role()) in ('owner', 'operator'));
 
--- owner only: roles, global settings, deleting and adding bots, worker limits
+-- owner only: roles, global settings, deleting and adding bots, any worker's limits
+-- (a person may also change the limits of their own computers - see guard_workers)
 create policy profiles_update on public.profiles for update to authenticated
   using ((select public.app_role()) = 'owner') with check ((select public.app_role()) = 'owner');
 create policy app_settings_insert on public.app_settings for insert to authenticated
@@ -514,7 +545,8 @@ create policy bots_insert on public.bots for insert to authenticated
 create policy bots_delete on public.bots for delete to authenticated
   using ((select public.app_role()) = 'owner');
 create policy workers_update on public.workers for update to authenticated
-  using ((select public.app_role()) = 'owner') with check ((select public.app_role()) = 'owner');
+  using ((select public.app_role()) = 'owner' or owner_id = (select auth.uid()))
+  with check ((select public.app_role()) = 'owner' or owner_id = (select auth.uid()));
 
 -- Workers use the service role key (server-side only) and bypass RLS.
 

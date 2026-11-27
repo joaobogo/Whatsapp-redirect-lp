@@ -316,5 +316,39 @@ select pg_temp.expect(
   (public.claim_next_run('30000000-0000-0000-0000-000000000002', true)).id is not null,
   'the preferred worker claims it');
 
+-- 10. people manage their own computers, and only theirs -----------------------
+update public.workers set owner_id = '00000000-0000-0000-0000-000000000003'
+ where id = '30000000-0000-0000-0000-000000000001';
+
+set local role authenticated;
+select pg_temp.act_as('00000000-0000-0000-0000-000000000003', 'authenticated');
+do $$
+declare changed int;
+begin
+  update public.workers set paused = true, max_concurrency = 1
+   where id = '30000000-0000-0000-0000-000000000001';
+  get diagnostics changed = row_count;
+  perform pg_temp.expect(changed = 1, 'a person can pause their own computer, even as a viewer');
+  update public.workers set paused = true where id = '30000000-0000-0000-0000-000000000002';
+  get diagnostics changed = row_count;
+  perform pg_temp.expect(changed = 0, 'a person cannot touch someone else''s computer');
+end $$;
+select pg_temp.expect_error(
+  $q$update public.workers set owner_id = null where id = '30000000-0000-0000-0000-000000000001'$q$,
+  'a person giving away or renaming their computer');
+select pg_temp.expect_error(
+  $q$update public.workers set has_desktop = true where id = '30000000-0000-0000-0000-000000000001'$q$,
+  'a person switching on full desktop control from the app');
+
+select pg_temp.act_as('00000000-0000-0000-0000-000000000001', 'authenticated');
+update public.workers set owner_id = '00000000-0000-0000-0000-000000000002'
+ where id = '30000000-0000-0000-0000-000000000001';
+select pg_temp.expect(
+  (select owner_id = '00000000-0000-0000-0000-000000000002' from public.workers
+    where id = '30000000-0000-0000-0000-000000000001'),
+  'an app owner can assign a computer to a person');
+reset role;
+select pg_temp.act_as(null, null);
+
 rollback;
 \echo 'schema checks passed'
