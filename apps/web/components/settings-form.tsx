@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Controller, type Control, type FieldErrors } from 'react-hook-form';
 import { Lock, Minus, Plus, X } from 'lucide-react';
 import type { BotSettings, FieldSpec } from '@fgv/shared';
@@ -24,6 +24,8 @@ export function SettingsFields({
   errors: FieldErrors<BotSettings>;
   disabled?: boolean;
 }) {
+  // two forms can be on screen at once (the page and the Run now sheet): keep their ids apart
+  const formId = useId();
   if (fields.length === 0) {
     return <p className="text-sm text-muted-foreground">This bot has no settings.</p>;
   }
@@ -35,7 +37,7 @@ export function SettingsFields({
         return (
           <div key={field.key} className="flex flex-col gap-2" data-field={field.key}>
             <div className="flex items-center gap-2">
-              <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
+              <Label htmlFor={`${formId}-${field.key}`}>{field.label}</Label>
               {locked ? (
                 <Lock className="size-3.5 text-muted-foreground" aria-label="Locked" />
               ) : null}
@@ -45,6 +47,7 @@ export function SettingsFields({
               control={control}
               render={({ field: form }) => (
                 <FieldControl
+                  id={`${formId}-${field.key}`}
                   field={field}
                   value={form.value}
                   onChange={form.onChange}
@@ -66,17 +69,18 @@ export function SettingsFields({
 }
 
 function FieldControl({
+  id,
   field,
   value,
   onChange,
   disabled,
 }: {
+  id: string;
   field: FieldSpec;
   value: unknown;
   onChange: (value: unknown) => void;
   disabled: boolean;
 }) {
-  const id = `field-${field.key}`;
   switch (field.kind) {
     case 'text':
     case 'url':

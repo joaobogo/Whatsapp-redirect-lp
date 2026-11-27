@@ -45,12 +45,15 @@ export default async function HomePage() {
       </section>
 
       {data.workersOnline === 0 ? (
-        <p className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
-          No worker computer is online, so runs will wait in the queue.{' '}
-          <Link href="/workers" className="font-medium underline underline-offset-4">
-            See workers
-          </Link>
-        </p>
+        <Link
+          href="/workers"
+          className="flex min-h-11 items-center rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm"
+        >
+          <span>
+            No worker computer is online, so runs will wait in the queue.{' '}
+            <span className="font-medium underline underline-offset-4">See workers</span>
+          </span>
+        </Link>
       ) : null}
 
       {data.bots.length === 0 ? (
@@ -75,7 +78,7 @@ export default async function HomePage() {
             >
               {channel}
             </h2>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {cards.map((card) => (
                 <BotCard
                   key={card.bot.id}

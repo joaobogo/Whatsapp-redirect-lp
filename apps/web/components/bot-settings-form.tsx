@@ -303,7 +303,7 @@ function RadioList({
               checked={active}
               disabled={disabled}
               onChange={() => onChange(option.value)}
-              className="mt-0.5 size-5 accent-[var(--primary)]"
+              className="mt-0.5 size-5 shrink-0 accent-[var(--primary)]"
             />
             <span className="min-w-0">
               <span className="block text-sm font-medium">{option.label}</span>

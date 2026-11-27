@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Globe, Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { timeAgo, type RunRow, type WorkerRow } from '@fgv/shared';
+import type { RunRow, WorkerRow } from '@fgv/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import { TimeAgo } from '@/components/time-ago';
 import { updateWorkerAction } from '@/lib/actions';
 
 export function WorkerCard({
@@ -42,7 +43,7 @@ export function WorkerCard({
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{worker.name}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Last heartbeat {timeAgo(worker.last_heartbeat)}
+            Last heartbeat <TimeAgo iso={worker.last_heartbeat} />
             {worker.version ? ` - v${worker.version}` : ''}
           </p>
         </div>

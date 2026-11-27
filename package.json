@@ -20,7 +20,8 @@
     "worker:login": "pnpm --filter @fgv/worker run login",
     "worker:dev": "pnpm --filter @fgv/worker run dev",
     "worker:start": "pnpm --filter @fgv/worker run start",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:local": "bash e2e/local-supabase/run.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
@@ -32,6 +33,7 @@
     "turbo": "^2.11.13",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.74.0",
-    "vitest": "^5.1.2"
+    "vitest": "^5.1.2",
+    "pg": "^8.23.1"
   }
 }

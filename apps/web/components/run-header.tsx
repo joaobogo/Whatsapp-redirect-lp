@@ -86,7 +86,10 @@ export function RunHeader({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold">
-            <Link href={`/bots/${botSlug}`} className="underline-offset-4 hover:underline">
+            <Link
+              href={`/bots/${botSlug}`}
+              className="inline-flex min-h-11 items-center underline-offset-4 hover:underline"
+            >
               {botName}
             </Link>
           </h1>
@@ -148,7 +151,7 @@ function Fact({ label, value, testId }: { label: string; value: string; testId?:
   return (
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-medium tabular-nums" data-testid={testId}>
+      <dd className="font-medium tabular-nums" data-testid={testId} suppressHydrationWarning>
         {value}
       </dd>
     </div>

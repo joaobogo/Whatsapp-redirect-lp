@@ -9,7 +9,6 @@ import {
   capabilitiesFor,
   fieldsFromJsonSchema,
   scheduleLabel,
-  timeAgo,
   type BotRow,
   type RunRow,
 } from '@fgv/shared';
@@ -18,6 +17,7 @@ import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { RunSheet } from '@/components/run-sheet';
 import { BotStatusPill } from '@/components/status-pill';
+import { TimeAgo } from '@/components/time-ago';
 import { updateBotAction } from '@/lib/actions';
 
 export interface BotCardProps {
@@ -84,8 +84,12 @@ export function BotCard({
           {contacts ? `${usedToday} / ${bot.daily_cap} today` : `${foundToday} found today`}
         </span>
         {lastRun ? (
-          <Link href={`/runs/${lastRun.id}`} className="underline-offset-4 hover:underline">
-            Last run {timeAgo(lastRun.finished_at)}
+          <Link
+            href={`/runs/${lastRun.id}`}
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+          >
+            Last run&nbsp;
+            <TimeAgo iso={lastRun.finished_at} />
           </Link>
         ) : (
           <span>Never run</span>

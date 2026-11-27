@@ -4,12 +4,13 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, ExternalLink, SkipForward } from 'lucide-react';
 import { toast } from 'sonner';
-import { ITEM_KIND_LABELS, timeAgo, type ItemKind, type ItemRow } from '@fgv/shared';
+import { ITEM_KIND_LABELS, type ItemKind, type ItemRow } from '@fgv/shared';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/input';
+import { TimeAgo } from '@/components/time-ago';
 import { updateItemsAction } from '@/lib/actions';
 import { cn } from '@/lib/utils';
 
@@ -275,7 +276,7 @@ export function ApprovalCard({
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Badge variant="outline">{ITEM_KIND_LABELS[item.kind]}</Badge>
         {botName ? <span>{botName}</span> : null}
-        <span>{timeAgo(item.created_at)}</span>
+        <TimeAgo iso={item.created_at} />
         {item.pay ? <span>{item.pay}</span> : null}
         {href ? (
           <a
@@ -306,7 +307,7 @@ export function ApprovalCard({
           aria-label="Draft"
           value={draft}
           readOnly={!canOperate}
-          rows={Math.min(12, Math.max(4, Math.ceil(draft.length / 60)))}
+          rows={Math.min(16, Math.max(4, Math.ceil(draft.length / 30) + 1))}
           onChange={(event) => setDraft(event.target.value)}
         />
       )}

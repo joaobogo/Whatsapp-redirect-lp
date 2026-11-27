@@ -133,7 +133,9 @@ export function LiveLog({
 
 function LogLine({ event }: { event: RunEventRow }) {
   const time = (
-    <time className="shrink-0 text-xs text-muted-foreground tabular-nums">{clock(event.ts)}</time>
+    <time className="shrink-0 text-xs text-muted-foreground tabular-nums" suppressHydrationWarning>
+      {clock(event.ts)}
+    </time>
   );
 
   if (event.type === 'tool') {

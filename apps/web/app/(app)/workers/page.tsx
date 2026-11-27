@@ -24,7 +24,7 @@ export default async function WorkersPage() {
           text="Install the worker on a computer (see the README). It shows up here by itself within a minute."
         />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {workers.map((entry) => (
             <WorkerCard key={entry.worker.id} {...entry} isOwner={viewer.role === 'owner'} />
           ))}
